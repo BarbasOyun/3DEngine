@@ -18,3 +18,4 @@
 -Build egui App as WASM<br>
 
 ## Images
+![Spinning Cube](Assets/3DEngine.gif)
