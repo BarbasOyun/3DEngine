@@ -5,17 +5,18 @@
 
 ## Features
 
--Display 3D Models (Only Vertices & Edges)<br>
--Import FBX File<br>
+-Display 3D Models Wireframe<br>
+-Import OBJ File<br>
 
 ## Learnings
 
--Trigonometry<br>
 -Linear Algebra<br>
 -Camera System<br>
--Graphic Programming<br>
+-Graphic Programming in General<br>
 
--Build egui App as WASM<br>
+-TODO : Build egui App as WASM<br>
 
-## Images
+## Progress
+
 ![Spinning Cube](Assets/3DEngine.gif)
+![Penger my Beloved](Assets/Penger.gif)

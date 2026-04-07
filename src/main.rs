@@ -1,6 +1,7 @@
 use std::vec;
 
 use eframe::egui::*;
+use egui::debug_text::print;
 use glam::Vec3;
 
 use rfd::FileDialog;
@@ -25,7 +26,6 @@ fn main() -> eframe::Result {
         Vec3::new(0.25, -0.25, -0.25),
     ];
 
-    // TODO : Triangulate + Flatten
     let faces: Vec<Vec<u16>> = vec![
         vec![0, 1, 2, 3], // Front
         vec![4, 5, 6, 7], // Back
@@ -60,23 +60,32 @@ fn start_app<T: eframe::App + 'static>(app: T) -> eframe::Result {
 struct ThreeDEngine {
     // TODO : Objects List -> Manage Multiple Objects
     position: Vec3,
+    osciallator: f32,
+    // TODO : Linear Algebra (Matrices) -> Rotation + Scale
+    // rotation: Vec3, // Degres
+    // scale: Vec3,
     vertices: Vec<glam::Vec3>,
-    faces: Vec<Vec<u16>>,
+    faces: Vec<Vec<u16>>, // TODO : Triangulate + Flatten
     stroke_color: Color32,
     stroke_width: f32,
     display_vertices: bool,
+    translate: bool,
     rotate: bool,
 }
 
 impl ThreeDEngine {
     fn new() -> Self {
         Self {
+            position: glam::Vec3::new(0.0, 0.0, 0.0),
+            osciallator: 0.0,
             vertices: Vec::new(),
+            // rotation: Vec3::new(0.0, 0.0, 0.0),
+            // scale: Vec3::new(1.0, 1.0, 1.0),
             faces: Vec::new(),
             stroke_color: egui::Color32::from_rgb(190, 110, 40),
             stroke_width: 2.0,
-            position: glam::Vec3::new(0.0, 0.0, 0.0),
             display_vertices: true,
+            translate: false,
             rotate: true,
         }
     }
@@ -84,8 +93,8 @@ impl ThreeDEngine {
     fn proj_to_screen(point: &Vec2, width: f32, height: f32) -> Vec2 {
         // -1..1 -> 0..2 -> 0..1 -> 0..width/height
         let min = width.min(height);
-        let x_offset = width.max(height) - min;
-        let x = (point.x + 1.0) / 2.0 * min + x_offset / 2.0;
+        let x_offset = (width.max(height) - min) / 2.0;
+        let x = (point.x + 1.0) / 2.0 * min + x_offset;
         let y = (1.0 - (point.y + 1.0) / 2.0) * min;
         return Vec2::new(x, y);
     }
@@ -118,9 +127,9 @@ impl ThreeDEngine {
         let file = FileDialog::new()
             .add_filter("Object Files", &["obj"]) // Filter for .obj files
             .set_directory("/") // Starting directory
-            .pick_file(); // This "blocks" until the user picks or cancels
+            .pick_file();
 
-        file // Returns Some(PathBuf) or None
+        return file;
     }
 
     fn load_obj_custom(&mut self, path: &str) {
@@ -165,16 +174,64 @@ impl eframe::App for ThreeDEngine {
 
             // Interactions
 
-            // Import OBJ
-
+            // Settings
             ui.horizontal(|ui| {
+                // Import OBJ
+                if ui.button("Import OBJ").clicked() {
+                    let file = Self::pick_obj_file();
+
+                    if let Some(path) = file {
+                        self.load_obj_custom(path.to_str().unwrap());
+                    }
+                }
+
                 if ui.button("Clear").clicked() {
                     self.vertices.clear();
                     self.faces.clear();
                 }
 
                 ui.checkbox(&mut self.display_vertices, "Display Vertices");
+            });
+
+            // Manual Transformations
+            // Position
+            ui.horizontal(|ui| {
+                ui.label("Position :");
+                ui.add(
+                    egui::DragValue::new(&mut self.position.x)
+                        .prefix("X: ")
+                        .speed(0.01),
+                );
+                ui.add(
+                    egui::DragValue::new(&mut self.position.y)
+                        .prefix("Y: ")
+                        .speed(0.01),
+                );
+                ui.add(
+                    egui::DragValue::new(&mut self.position.z)
+                        .prefix("Z: ")
+                        .speed(0.01),
+                );
+                if ui.button("Reset").clicked() {
+                    self.position = Vec3::new(0.0, 0.0, 1.0);
+                }
+            });
+
+            // Rotation
+            // ui.horizontal(|ui| {
+            //     ui.label("Rotation :");
+            //     ui.add(egui::DragValue::new(&mut self.rotation.x).prefix("X: ").speed(0.01));
+            //     ui.add(egui::DragValue::new(&mut self.rotation.y).prefix("Y: ").speed(0.01));
+            //     ui.add(egui::DragValue::new(&mut self.rotation.z).prefix("Z: ").speed(0.01));
+            //     if ui.button("Reset").clicked() {
+            //         self.position = Vec3::new(0.0, 0.0, 1.0);
+            //     }
+            // });
+
+            // Automatic Transformations
+            ui.horizontal(|ui| {
                 ui.checkbox(&mut self.rotate, "Rotate");
+                ui.checkbox(&mut self.translate, "Translate");
             });
 
             // Draw area
@@ -191,21 +248,27 @@ impl eframe::App for ThreeDEngine {
                 egui::StrokeKind::Middle,
             );
 
+            if self.translate {
+                self.osciallator += dt;
+                let amplitude = 0.01;
+                let oscillation = self.osciallator.sin();
+                self.position.x += oscillation * amplitude; // Oscillate horizontally
+            }
+
             let angle = std::f32::consts::PI * dt; // 180 degrees per second
             let sin_angle = angle.sin();
             let cos_angle = angle.cos();
 
             // Display Vertices
             for vertex in &mut self.vertices {
-                if self.rotate { // TODO : StateMachine
+                if self.rotate {
+                    // TODO : StateMachine
                     // Self::rotate_y(vertex, angle); // Rotate
                     Self::rotate_y_computed(vertex, sin_angle, cos_angle); // Rotate
                 }
 
-                // self.position.z += 0.005; // Translate
-
                 if self.display_vertices {
-                    let vertex_pos = Self::project(&(self.position + *vertex)); // Project
+                    let vertex_pos = Self::project(&(self.position + *vertex));
                     let vertex_rect = Rect::from_center_size(
                         rect.left_top()
                             + Self::proj_to_screen(&vertex_pos, rect.width(), rect.height()),
