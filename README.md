@@ -5,19 +5,23 @@
 
 ## Features
 
--Display 3D Models Wireframe<br>
+-Render 3D Models Wireframe<br>
+-Transform 3D Model<br>
+-Transform Camera<br>
 -Import OBJ File<br>
 
 ## Learnings
 
 -Linear Algebra<br>
 -Camera System<br>
--Graphic Programming in General<br>
+-Rendering Pipeline<br>
+-Graphics Programming in General<br>
 
--TODO : Build egui App as WASM<br>
+-A lot of dead code but I want to keep it as exemple (Old Engine)<br>
 
 ## Progress
 
-![Spinning Cube](Assets/3DEngine.gif)
-![Penger my Beloved](Assets/Penger.gif)
-![Spinosaurus](Assets/Spinosaurus.gif)
+![Spinning Cube](assets/3DEngine.gif)
+![Penger my Beloved](assets/Penger.gif)
+![Spinosaurus](assets/SPINosaurus.gif)
+![Transformations](assets/Transformations.gif)
