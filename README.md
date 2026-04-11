@@ -5,20 +5,20 @@
 
 ## Controls
 
--Move Camera = WASD (ZQSD if AZERTY is enabled)
--Rotate Camera = Right Click
+-Move Camera = WASD (ZQSD if AZERTY is enabled)<br>
+-Rotate Camera = Right Click<br>
 
 ## Features
 
 -Render 3D Models Wireframe<br>
 -Transform 3D Model<br>
--Transform Camera<br>
+-Move + Rotate Camera<br>
 -Import OBJ File<br>
 -Right-Handed 3D (Z forward = -Z) Similar to : Blender, Godot, OpenGl, Vulkan
 
 ## Learnings
 
--Applied Maths : Linear Algebra, Intercept Theorem, Vectors Operations (Dot Prduct, Cross Product), Matrix Multiplication<br>
+-Applied Maths : Linear Algebra, Intercept Theorem, Vectors Operations (Dot Product, Cross Product), Matrix Multiplication<br>
 -Camera System<br>
 -Rendering Pipeline<br>
 -Graphics Programming in General<br>

@@ -185,7 +185,7 @@ impl ThreeDEngine {
         }
     }
 
-    // Model -> Model Image (Model + Transformations) / World -> 2D Frustum (Projection) -> Screen Space
+    // Base Model -> Model Matrix (Model + Transformations) + View + Projection -> 2D Frustum (Projection) -> Screen Space
     fn frame_image(
         &self,
         rect: &egui::Rect,
