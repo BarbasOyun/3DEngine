@@ -1,9 +1,9 @@
 use std::vec;
 
 use eframe::egui::*;
-// use egui::debug_text::print;
-use glam::Vec3;
+use glam::Vec3; // egui doesn't have Vec3
 
+// Import File
 use rfd::FileDialog;
 use std::path::PathBuf;
 use tobj::LoadOptions;
@@ -54,12 +54,14 @@ impl Bindings {
 
 struct ThreeDEngine {
     // RENDERING
-    // TODO : Store Radians instead of Degrees for performance
+    // TODO : Store Radians instead of Degrees (Performance)
     smoothed_fps: f32,
-    camera_speed: f32,
     camera_position: Vec3,
     camera_rotation: Vec3, // Degrees : Yaw, Pitch, Roll
-    fov: f32,              // Field of View (Degrees)
+    camera_speed: f32,
+    sensitivity: f32,
+    camera_forward: Vec3,
+    fov: f32, // Field of View (Degrees)
     stroke: Stroke,
     perspective: bool,
     display_vertices: bool,
@@ -86,9 +88,11 @@ impl ThreeDEngine {
         Self {
             // RENDERING
             smoothed_fps: 60.0,
+            camera_position: Vec3::new(0.0, 0.0, 0.0),
+            camera_rotation: Vec3::new(0.0, 0.0, 0.0),
             camera_speed: 0.05,
-            camera_position: glam::Vec3::new(0.0, 0.0, 0.0),
-            camera_rotation: glam::Vec3::new(0.0, 0.0, 0.0),
+            sensitivity: 0.1,
+            camera_forward: Vec3::new(0.0, 0.0, 1.0),
             fov: 90.0,
             stroke: egui::Stroke::new(2.0, egui::Color32::from_rgb(190, 110, 40)),
             perspective: true,
@@ -96,7 +100,7 @@ impl ThreeDEngine {
             // LOGIC : Transformations
             bindings: Bindings::qwerty(),
             azerty: false,
-            model_position: glam::Vec3::new(0.0, 0.0, 1.0),
+            model_position: glam::Vec3::new(0.0, 0.0, -1.0),
             model_rotation: Vec3::new(0.0, 0.0, 0.0),
             model_scale: Vec3::new(1.0, 1.0, 1.0),
             translate: false,
@@ -133,6 +137,19 @@ impl ThreeDEngine {
             let oscillation = self.scale_osciallator.sin() * amplitude;
             self.model_scale += Vec3::new(oscillation, oscillation, oscillation);
         }
+    }
+
+    fn calc_camera_forward(&mut self) {
+        let yaw_rad = self.camera_rotation.y.to_radians();
+        let pitch_rad = self.camera_rotation.x.to_radians();
+
+        let cos_pitch = pitch_rad.cos();
+        let sin_pitch = pitch_rad.sin();
+
+        let cos_yaw = yaw_rad.cos();
+        let sin_yaw = yaw_rad.sin();
+        self.camera_forward =
+            Vec3::new(cos_pitch * sin_yaw, sin_pitch, -cos_pitch * cos_yaw).normalize();
     }
 
     // RENDERING
@@ -173,39 +190,46 @@ impl ThreeDEngine {
         rect: &egui::Rect,
         projection_function: &dyn Fn(&Self, &Vec3) -> Vec2,
     ) -> Vec<Option<egui::Vec2>> {
-        let rotation_matrix_x = glam::Mat3::from_rotation_x(self.model_rotation.x.to_radians());
-        let rotation_matrix_y = glam::Mat3::from_rotation_y(self.model_rotation.y.to_radians());
-        let rotation_matrix_z = glam::Mat3::from_rotation_z(self.model_rotation.z.to_radians());
-        let scale_matrix = glam::Mat3::from_diagonal(self.model_scale);
-
         return self
             .vertices
             .iter()
             .map(|v| {
-                // 1] Model Rotation/Scale = Model -> World Space
-                let mut world_v =
-                    scale_matrix * rotation_matrix_z * rotation_matrix_y * rotation_matrix_x * *v;
-
-                // 2] World Space -> View Space
-                world_v += self.model_position;
-                // Camera Position
-                world_v = self.relative_vertex(&world_v);
-
-                let cam_quat = glam::Quat::from_euler(
-                    glam::EulerRot::YXZ,
-                    self.camera_rotation.y.to_radians(),
-                    self.camera_rotation.x.to_radians(),
-                    self.camera_rotation.z.to_radians(),
+                // 1] Model Matrix = Model + Transformations
+                let model = glam::Mat4::from_scale_rotation_translation(
+                    self.model_scale,
+                    glam::Quat::from_euler(
+                        glam::EulerRot::YXZ,
+                        self.model_rotation.y.to_radians(),
+                        self.model_rotation.x.to_radians(),
+                        self.model_rotation.z.to_radians(),
+                    ),
+                    self.model_position,
                 );
 
-                // View Rotation = Camera Rotation inverse (conjugate)
-                let view_quat = cam_quat.inverse(); // cam_quat.conjugate();
-                let view_matrix = glam::Mat3::from_quat(view_quat);
+                // 2] Camera View Matrix
+                let view = glam::Mat4::look_at_rh(
+                    self.camera_position,
+                    self.camera_position + self.camera_forward,
+                    Vec3::Y,
+                ); // Vec3::Y = (0, 1, 0)
 
-                world_v = view_matrix * world_v;
+                // 3] Projection Matrix
+                let projection = glam::Mat4::perspective_rh(
+                    self.fov.to_radians(),
+                    1.0,
+                    0.1,    // Near clip
+                    1000.0, // Far clip
+                );
 
-                // 3] Projection
-                return (world_v.z - self.camera_position.z > 0.1).then(|| {
+                // 4] Apply Matrices : Model -> Camera
+                let mvp: glam::Mat4 = projection * view * model;
+                let world_v: Vec3 = mvp.project_point3(*v);
+
+                // 5] Projection
+                let is_in_fov =
+                    world_v.x.abs() <= 1.0 && world_v.y.abs() <= 1.0 && world_v.z.abs() <= 1.0;
+
+                return (is_in_fov).then(|| {
                     Self::proj_to_screen(
                         &projection_function(&self, &world_v),
                         rect.width(),
@@ -218,30 +242,15 @@ impl ThreeDEngine {
 
     // World -> 2D Frustum (Perspective)
     fn perspective_project(&self, vertex: &Vec3) -> Vec2 {
-        // let aspect_ratio = 1.0;
-        let fov_rad = self.fov.to_radians();
-        let f = 1.0 / (fov_rad * 0.5).tan();
-
         return Vec2::new(
-            vertex.x * f / vertex.z, // / aspect_ratio
-            vertex.y * f / vertex.z,
+            vertex.x / vertex.z,
+            vertex.y / vertex.z,
         );
     }
 
     // World -> 2D Frustum (Orthographic)
     fn orthographic_project(&self, vertex: &Vec3) -> Vec2 {
-        let fov_rad = self.fov.to_radians();
-        let f = 1.0 / (fov_rad * 0.5).tan();
-
-        return Vec2::new(vertex.x * f, vertex.y * f);
-    }
-
-    fn relative_vertex(&self, vertex: &Vec3) -> Vec3 {
-        return Vec3::new(
-            vertex.x - self.camera_position.x,
-            vertex.y - self.camera_position.y,
-            vertex.z - self.camera_position.z,
-        );
+        return Vec2::new(vertex.x, vertex.y);
     }
 
     // 2D Frustum -> Screen space
@@ -368,6 +377,84 @@ impl ThreeDEngine {
 
     // OLD ENGINE
 
+    // Engine 1
+    fn old_frame_image(
+        &self,
+        rect: &egui::Rect,
+        projection_function: &dyn Fn(&Self, &Vec3) -> Vec2,
+    ) -> Vec<Option<egui::Vec2>> {
+        let rotation_matrix_x = glam::Mat3::from_rotation_x(self.model_rotation.x.to_radians());
+        let rotation_matrix_y = glam::Mat3::from_rotation_y(self.model_rotation.y.to_radians());
+        let rotation_matrix_z = glam::Mat3::from_rotation_z(self.model_rotation.z.to_radians());
+        let scale_matrix = glam::Mat3::from_diagonal(self.model_scale);
+
+        return self
+            .vertices
+            .iter()
+            .map(|v| {
+                // 1] Model + Transformations -> World Space
+                let mut world_v =
+                    scale_matrix * rotation_matrix_z * rotation_matrix_y * rotation_matrix_x * *v;
+                world_v += self.model_position;
+
+                // 2] World Space -> View Space (Camera)
+                // View Position
+                world_v = self.relative_vertex(&world_v);
+
+                // View Rotation = Camera Rotation inverse
+                let cam_quat = glam::Quat::from_euler(
+                    glam::EulerRot::YXZ,
+                    self.camera_rotation.y.to_radians(),
+                    self.camera_rotation.x.to_radians(),
+                    self.camera_rotation.z.to_radians(),
+                );
+
+                let view_quat = cam_quat.inverse();
+                let view_matrix = glam::Mat3::from_quat(view_quat);
+
+                world_v = view_matrix * world_v;
+
+                // 3] Projection
+                return (world_v.z - self.camera_position.z > 0.1).then(|| {
+                    Self::proj_to_screen(
+                        &projection_function(&self, &world_v),
+                        rect.width(),
+                        rect.height(),
+                    )
+                });
+            })
+            .collect();
+    }
+
+    fn relative_vertex(&self, vertex: &Vec3) -> Vec3 {
+        return Vec3::new(
+            vertex.x - self.camera_position.x,
+            vertex.y - self.camera_position.y,
+            vertex.z - self.camera_position.z,
+        );
+    }
+
+    fn calc_fov(&self) -> f32 {
+        let fov_rad = self.fov.to_radians();
+        return 1.0 / (fov_rad * 0.5).tan();
+    }
+
+    fn old_perspective_project(&self, vertex: &Vec3) -> Vec2 {
+        // let aspect_ratio = 1.0;
+        let f = self.calc_fov();
+
+        return Vec2::new(
+            vertex.x * f / vertex.z,  // / aspect_ratio
+            -vertex.y * f / vertex.z, // - = Flip Y -> 0, 0 = Top Left in Screen Space
+        );
+    }
+
+    fn old_orthographic_project(&self, vertex: &Vec3) -> Vec2 {
+        let f = self.calc_fov();
+        return Vec2::new(vertex.x * f, -vertex.y * f);
+    }
+
+    // Engine 0 : Tsoding Video
     fn old_engine(
         &mut self,
         dt: f32,
@@ -577,23 +664,26 @@ impl eframe::App for ThreeDEngine {
             // LOGIC
 
             // Camera Controls
+            self.calc_camera_forward();
             ui.input(|i| {
+                // Camera Position
                 if i.key_down(self.bindings.forward) {
-                    self.camera_position.z += self.camera_speed; // Forward
+                    self.camera_position += self.camera_forward * self.camera_speed; // Forward
                 } else if i.key_down(self.bindings.backward) {
-                    self.camera_position.z -= self.camera_speed; // Backward
+                    self.camera_position -= self.camera_forward * self.camera_speed; // Backward
                 }
 
                 if i.key_down(self.bindings.left) {
-                    self.camera_position.x -= self.camera_speed; // Left
+                    self.camera_position -= self.camera_forward.cross(Vec3::Y) * self.camera_speed; // Left
                 } else if i.key_down(self.bindings.right) {
-                    self.camera_position.x += self.camera_speed; // Right
+                    self.camera_position += self.camera_forward.cross(Vec3::Y) * self.camera_speed; // Right
                 }
 
+                // Camera Angle
                 if i.pointer.secondary_down() {
                     let delta = i.pointer.delta();
-                    self.camera_rotation.y += delta.x * 0.1; // Yaw
-                    self.camera_rotation.x += delta.y * 0.1; // Pitch
+                    self.camera_rotation.y += delta.x * self.sensitivity; // Yaw / Horizontal
+                    self.camera_rotation.x -= delta.y * self.sensitivity; // Pitch / Vertical
                 }
             });
 
@@ -615,7 +705,6 @@ impl eframe::App for ThreeDEngine {
             );
 
             self.render_frame(&rect, &painter);
-
             self.display_fps(&rect, &painter, fps);
         });
     }
