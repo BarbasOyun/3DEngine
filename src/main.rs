@@ -1,3 +1,4 @@
+#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")] // hide console window on Windows in release
 use std::vec;
 
 use eframe::egui::*;
@@ -206,7 +207,7 @@ impl ThreeDEngine {
                     self.model_position,
                 );
 
-                // 2] Camera View Matrix
+                // 2] Camera / View Matrix
                 let view = glam::Mat4::look_at_rh(
                     self.camera_position,
                     self.camera_position + self.camera_forward,
@@ -221,7 +222,7 @@ impl ThreeDEngine {
                     1000.0, // Far clip
                 );
 
-                // 4] Apply Matrices : Model -> Camera
+                // 4] Apply Matrices : Model -> View -> Projection
                 let mvp: glam::Mat4 = projection * view * model;
                 let world_v: Vec3 = mvp.project_point3(*v);
 
@@ -319,7 +320,7 @@ impl ThreeDEngine {
         self.faces = faces;
     }
 
-    fn display_fps(&mut self, rect: &egui::Rect, painter: &egui::Painter, fps: f32) {
+    fn hud(&mut self, rect: &egui::Rect, painter: &egui::Painter, fps: f32) {
         let alpha = 0.05;
         self.smoothed_fps = (self.smoothed_fps * (1.0 - alpha)) + (fps * alpha);
 
@@ -327,6 +328,14 @@ impl ThreeDEngine {
             rect.left_top() + egui::vec2(10.0, 10.0), // 10px padding from top-left
             egui::Align2::LEFT_TOP,
             format!("FPS: {:.2}", self.smoothed_fps),
+            egui::FontId::proportional(14.0),
+            egui::Color32::WHITE,
+        );
+
+        painter.text(
+            rect.left_top() + egui::vec2(10.0, 30.0),
+            egui::Align2::LEFT_TOP,
+            "Movement : WASD\nLook : Right Click",
             egui::FontId::proportional(14.0),
             egui::Color32::WHITE,
         );
@@ -705,7 +714,7 @@ impl eframe::App for ThreeDEngine {
             );
 
             self.render_frame(&rect, &painter);
-            self.display_fps(&rect, &painter, fps);
+            self.hud(&rect, &painter, fps);
         });
     }
 }
