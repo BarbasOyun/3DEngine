@@ -14,7 +14,7 @@
 -Transform 3D Model<br>
 -Move + Rotate Camera<br>
 -Import OBJ File<br>
--Right-Handed 3D (Z forward = -Z, Camera start at 180° Y Rotation) Similar to : Blender, Godot, OpenGl, Vulkan
+-Right-Handed 3D (Z forward = -Z, Camera start at 180° Y Rotation) Similar to : Blender, Godot, OpenGl, Vulkan<br>
 
 ## Learnings
 
@@ -36,8 +36,8 @@
 ## Progress
 
 3D Model used for the gifs:<br>
-[Penger]("https://github.com/Max-Kawula/penger-obj")<br>
-[Jurassic Park 3 Spinosaure]("https://sketchfab.com/3d-models/jurassic-park-3-spinosaurus-0bcc1f6d3f1e491b9164f3e21fec8b19")<br>
+[Penger](https://github.com/Max-Kawula/penger-obj)<br>
+[Jurassic Park 3 Spinosaure](https://sketchfab.com/3d-models/jurassic-park-3-spinosaurus-0bcc1f6d3f1e491b9164f3e21fec8b19)<br>
 
 ![Spinning Cube](assets/3DEngine.gif)
 ![Penger my Beloved](assets/Penger.gif)
