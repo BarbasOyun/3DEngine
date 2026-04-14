@@ -35,9 +35,9 @@
 
 ## Progress
 
-3D Model used for the gifs:<br>
-[Penger](https://github.com/Max-Kawula/penger-obj)<br>
-[Jurassic Park 3 Spinosaure](https://sketchfab.com/3d-models/jurassic-park-3-spinosaurus-0bcc1f6d3f1e491b9164f3e21fec8b19)<br>
+3D Models used for the gifs:<br>
+-[Penger](https://github.com/Max-Kawula/penger-obj)<br>
+-[Jurassic Park 3 Spinosaurus](https://sketchfab.com/3d-models/jurassic-park-3-spinosaurus-0bcc1f6d3f1e491b9164f3e21fec8b19)<br>
 
 ![Spinning Cube](assets/3DEngine.gif)
 ![Penger my Beloved](assets/Penger.gif)
