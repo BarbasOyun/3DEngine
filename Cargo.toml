@@ -7,7 +7,21 @@ edition = "2024"
 eframe = "0.34.1"
 egui = "0.34.1"
 glam = "0.32.1"
-tobj = "4.0"
-rfd = "0.15"
 
+# Import File
+tobj = "4.0"
+rfd = { version = "0.15", features = ["xdg-portal"] }
+
+# Non-WASM
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+tokio = { version = "1.51.1", features = ["rt-multi-thread", "macros", "sync"] }
+
+# WASM
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+wasm-bindgen = "0.2"
+wasm-bindgen-futures = "0.4"
+log = "0.4"
+web-sys = "0.3.70"
 getrandom = { version = "0.3", features = ["wasm_js"] }
+# getrandom = { version = "0.3", features = ["js"] }
+ahash = "0.8"

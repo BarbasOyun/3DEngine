@@ -14,7 +14,7 @@
 -Transform 3D Model<br>
 -Move + Rotate Camera<br>
 -Import OBJ File<br>
--Right-Handed 3D (Z forward = -Z) Similar to : Blender, Godot, OpenGl, Vulkan
+-Right-Handed 3D (Z forward = -Z, Camera start at 180° Y Rotation) Similar to : Blender, Godot, OpenGl, Vulkan
 
 ## Learnings
 
@@ -24,6 +24,14 @@
 -Graphics Programming in General<br>
 
 -A lot of dead code / comments but I want to keep it as exemple (Old Engine)<br>
+
+## To Go Further
+
+-Optimisations (Triangulate Faces)<br>
+-Render Faces<br>
+-Calculate Face Normals<br>
+-Lighting<br>
+-Textures<br>
 
 ## Progress
 

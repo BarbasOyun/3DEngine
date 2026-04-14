@@ -5,25 +5,76 @@ use eframe::egui::*;
 use glam::Vec3; // egui doesn't have Vec3
 
 // Import File
-use rfd::FileDialog;
-use std::path::PathBuf;
+use rfd::{AsyncFileDialog, FileHandle};
+use std::sync::mpsc::{Receiver, Sender, channel};
 use tobj::LoadOptions;
 
-fn main() -> eframe::Result {
+#[cfg(not(target_arch = "wasm32"))]
+#[tokio::main]
+async fn main() -> eframe::Result {
     let mut three_d_engine = ThreeDEngine::new();
 
     three_d_engine.cube();
 
-    return start_app(three_d_engine);
-}
-
-fn start_app<T: eframe::App + 'static>(app: T) -> eframe::Result {
     let options = eframe::NativeOptions {
         viewport: ViewportBuilder::default().with_inner_size([800.0, 800.0]),
         ..Default::default()
     };
 
-    eframe::run_native("3D Engine", options, Box::new(|_cc| Ok(Box::new(app))))
+    eframe::run_native(
+        "3D Engine",
+        options,
+        Box::new(|_cc| Ok(Box::new(three_d_engine))),
+    )
+}
+
+#[cfg(target_arch = "wasm32")]
+fn main() {
+    use eframe::wasm_bindgen::JsCast as _;
+
+    let mut three_d_engine = ThreeDEngine::new();
+    three_d_engine.cube();
+
+    // Redirect `log` message to `console.log` and friends:
+    eframe::WebLogger::init(log::LevelFilter::Debug).ok();
+
+    let web_options = eframe::WebOptions::default();
+
+    wasm_bindgen_futures::spawn_local(async {
+        let document = web_sys::window()
+            .expect("No window")
+            .document()
+            .expect("No document");
+
+        let canvas = document
+            .get_element_by_id("the_canvas_id")
+            .expect("Failed to find the_canvas_id")
+            .dyn_into::<web_sys::HtmlCanvasElement>()
+            .expect("the_canvas_id was not a HtmlCanvasElement");
+
+        let start_result = eframe::WebRunner::new()
+            .start(
+                canvas,
+                web_options,
+                Box::new(|_cc| Ok(Box::new(three_d_engine))),
+            )
+            .await;
+
+        // Remove the loading text and spinner:
+        if let Some(loading_text) = document.get_element_by_id("loading_text") {
+            match start_result {
+                Ok(_) => {
+                    loading_text.remove();
+                }
+                Err(e) => {
+                    loading_text.set_inner_html(
+                        "<p> The app has crashed. See the developer console for details. </p>",
+                    );
+                    panic!("Failed to start eframe: {e:?}");
+                }
+            }
+        }
+    });
 }
 
 struct Bindings {
@@ -80,17 +131,21 @@ struct ThreeDEngine {
     scale_osciallator: f32,
     // MODEL DATA
     // TODO : Separate Data / Engine
+    tx: Sender<Vec<u8>>,
+    rx: Receiver<Vec<u8>>,
     vertices: Vec<glam::Vec3>,
     faces: Vec<Vec<u16>>, // TODO : Triangulate + Flatten
 }
 
 impl ThreeDEngine {
     fn new() -> Self {
+        let (tx, rx) = channel::<Vec<u8>>();
+
         Self {
             // RENDERING
             smoothed_fps: 60.0,
             camera_position: Vec3::new(0.0, 0.0, 0.0),
-            camera_rotation: Vec3::new(0.0, 0.0, 0.0),
+            camera_rotation: Vec3::new(0.0, 180.0, 0.0),
             camera_speed: 0.05,
             sensitivity: 0.1,
             camera_forward: Vec3::new(0.0, 0.0, 1.0),
@@ -101,7 +156,7 @@ impl ThreeDEngine {
             // LOGIC : Transformations
             bindings: Bindings::qwerty(),
             azerty: false,
-            model_position: glam::Vec3::new(0.0, 0.0, -1.0),
+            model_position: glam::Vec3::new(0.0, 0.0, 1.0),
             model_rotation: Vec3::new(0.0, 0.0, 0.0),
             model_scale: Vec3::new(1.0, 1.0, 1.0),
             translate: false,
@@ -110,6 +165,8 @@ impl ThreeDEngine {
             translate_osciallator: 0.0,
             scale_osciallator: 0.0,
             // MODEL DATA
+            tx,
+            rx,
             vertices: Vec::new(),
             faces: Vec::new(),
         }
@@ -195,7 +252,7 @@ impl ThreeDEngine {
             .vertices
             .iter()
             .map(|v| {
-                // 1] Model Matrix = Model + Transformations
+                // 1) Model Matrix = Model + Transformations
                 let model = glam::Mat4::from_scale_rotation_translation(
                     self.model_scale,
                     glam::Quat::from_euler(
@@ -207,14 +264,14 @@ impl ThreeDEngine {
                     self.model_position,
                 );
 
-                // 2] Camera / View Matrix
+                // 2) Camera / View Matrix
                 let view = glam::Mat4::look_at_rh(
                     self.camera_position,
                     self.camera_position + self.camera_forward,
                     Vec3::Y,
                 ); // Vec3::Y = (0, 1, 0)
 
-                // 3] Projection Matrix
+                // 3) Projection Matrix
                 let projection = glam::Mat4::perspective_rh(
                     self.fov.to_radians(),
                     1.0,
@@ -222,11 +279,11 @@ impl ThreeDEngine {
                     1000.0, // Far clip
                 );
 
-                // 4] Apply Matrices : Model -> View -> Projection
+                // 4) Apply Matrices : Model -> View -> Projection
                 let mvp: glam::Mat4 = projection * view * model;
                 let world_v: Vec3 = mvp.project_point3(*v);
 
-                // 5] Projection
+                // 5) Projection
                 let is_in_fov =
                     world_v.x.abs() <= 1.0 && world_v.y.abs() <= 1.0 && world_v.z.abs() <= 1.0;
 
@@ -243,10 +300,7 @@ impl ThreeDEngine {
 
     // World -> 2D Frustum (Perspective)
     fn perspective_project(&self, vertex: &Vec3) -> Vec2 {
-        return Vec2::new(
-            vertex.x / vertex.z,
-            vertex.y / vertex.z,
-        );
+        return Vec2::new(vertex.x / vertex.z, vertex.y / vertex.z);
     }
 
     // World -> 2D Frustum (Orthographic)
@@ -321,6 +375,7 @@ impl ThreeDEngine {
     }
 
     fn hud(&mut self, rect: &egui::Rect, painter: &egui::Painter, fps: f32) {
+        // FPS Display
         let alpha = 0.05;
         self.smoothed_fps = (self.smoothed_fps * (1.0 - alpha)) + (fps * alpha);
 
@@ -332,6 +387,7 @@ impl ThreeDEngine {
             egui::Color32::WHITE,
         );
 
+        // Controls Display
         painter.text(
             rect.left_top() + egui::vec2(10.0, 30.0),
             egui::Align2::LEFT_TOP,
@@ -342,38 +398,63 @@ impl ThreeDEngine {
     }
 
     // Load OBJ
-    fn pick_obj_file() -> Option<PathBuf> {
-        let file = FileDialog::new()
-            .add_filter("Object Files", &["obj"]) // Filter for .obj files
-            .set_directory("/") // Starting directory
+    fn pick_obj_async(&mut self) {
+        // Define Operations
+        let pick_file = AsyncFileDialog::new()
+            .add_filter("obj", &["obj"])
             .pick_file();
 
-        return file;
+        let tx = self.tx.clone();
+        let task = async move {
+            if let Some(file_handle) = pick_file.await {
+                let bytes = file_handle.read().await;
+                tx.send(bytes).unwrap();
+            }
+        };
+
+        // Execute Operations based on Environment
+        #[cfg(not(target_arch = "wasm32"))]
+        std::thread::spawn(move || {
+            let rt = tokio::runtime::Builder::new_current_thread()
+                .enable_all()
+                .build()
+                .unwrap();
+
+            rt.block_on(task);
+        });
+
+        #[cfg(target_arch = "wasm32")]
+        wasm_bindgen_futures::spawn_local(task);
     }
 
-    fn load_obj_custom(&mut self, path: &str) {
-        // 1. Load the file
-        let (models, _) = tobj::load_obj(
-            path,
-            &LoadOptions {
-                triangulate: true, // Converts quads to triangles automatically
+    fn load_obj_bytes(&mut self, bytes: Vec<u8>) {
+        // Use a cursor to treat the bytes like a file stream
+        let mut reader = std::io::Cursor::new(bytes);
+
+        let (models, materials) = tobj::load_obj_buf(
+            &mut reader,
+            &tobj::LoadOptions {
+                triangulate: true,
                 single_index: true,
                 ..Default::default()
             },
+            |_p| Ok((vec![], ahash::AHashMap::new())), // Material loader
         )
-        .expect("Failed to load OBJ file");
+        .expect("Failed to parse OBJ");
 
         let mesh = &models[0].mesh;
+        self.load_mesh(mesh);
+    }
 
-        // 2. Convert flat f32 vec [x,y,z, x,y,z] to Vec<Vec3>
+    fn load_mesh(&mut self, mesh: &tobj::Mesh) {
+        // 1. Convert flat f32 vec [x,y,z, x,y,z] to Vec<Vec3>
         let vertices: Vec<Vec3> = mesh
             .positions
             .chunks_exact(3)
             .map(|p| Vec3::new(p[0], p[1], p[2]))
             .collect();
 
-        // 3. Convert flat indices [0,1,2, 3,4,5] to Vec<Vec<u8>>
-        // Since we triangulated, each face has exactly 3 indices.
+        // 2. Convert flat indices [0,1,2, 3,4,5] to Vec<Vec<u8>>
         let faces: Vec<Vec<u16>> = mesh
             .indices
             .chunks_exact(3)
@@ -385,6 +466,35 @@ impl ThreeDEngine {
     }
 
     // OLD ENGINE
+
+    // synchronous Load OBJ File
+    // use rfd::{FileDialog, FileHandle};
+    // use std::path::PathBuf;
+
+    // fn pick_obj_file() -> Option<PathBuf> {
+    //     let file = FileDialog::new()
+    //         .add_filter("Object Files", &["obj"]) // Filter for .obj files
+    //         .set_directory("/") // Starting directory
+    //         .pick_file();
+
+    //     return file;
+    // }
+
+    fn load_obj_custom(&mut self, path: &str) {
+        // Load the file
+        let (models, _) = tobj::load_obj(
+            path,
+            &LoadOptions {
+                triangulate: true, // Converts quads to triangles automatically
+                single_index: true,
+                ..Default::default()
+            },
+        )
+        .expect("Failed to load OBJ file");
+
+        let mesh = &models[0].mesh;
+        self.load_mesh(mesh);
+    }
 
     // Engine 1
     fn old_frame_image(
@@ -557,23 +667,33 @@ impl eframe::App for ThreeDEngine {
             let dt = ui.input(|i| i.stable_dt); // DeltaTime in second
             let fps = 1.0 / dt;
 
+            // Check for imported model
+            if let Ok(bytes) = self.rx.try_recv() {
+                self.load_obj_bytes(bytes);
+            }
+
             // INTERFACE
 
             // Settings : Import OBJ, Reset, Perspective, Render Vertices, Bindings
             ui.horizontal(|ui| {
+                // Import OBJ
                 if ui.button("Import OBJ").clicked() {
-                    let file = Self::pick_obj_file();
+                    // let file = Self::pick_obj_file();
 
-                    if let Some(path) = file {
-                        self.load_obj_custom(path.to_str().unwrap());
-                    }
+                    // if let Some(path) = file {
+                    //     self.load_obj_custom(path.to_str().unwrap());
+                    // }
+
+                    self.pick_obj_async();
                 }
 
+                // Reset
                 if ui.button("Reset").clicked() {
                     *self = Self::new();
                     self.cube();
                 }
 
+                // Rendering
                 ui.checkbox(&mut self.perspective, "Perspective");
                 ui.add(
                     egui::DragValue::new(&mut self.fov)
@@ -583,6 +703,7 @@ impl eframe::App for ThreeDEngine {
                 );
                 ui.checkbox(&mut self.display_vertices, "Render Vertices");
 
+                // Controls
                 if ui.checkbox(&mut self.azerty, "AZERTY").clicked() {
                     if self.azerty {
                         self.bindings = Bindings::azerty();
@@ -616,7 +737,8 @@ impl eframe::App for ThreeDEngine {
 
                 // Model Rotation
                 ui.label("Rotation :");
-                let response = ui.add(
+                // let response =
+                ui.add(
                     egui::DragValue::new(&mut self.model_rotation.x)
                         .prefix("X: ")
                         .speed(0.05)
