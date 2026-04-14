@@ -18,7 +18,7 @@
 
 ## Learnings
 
--Applied Maths : Linear Algebra, Intercept Theorem, Vectors Operations (Dot Product, Cross Product), Matrix Multiplication<br>
+-Applied Maths : Linear Algebra, Intercept Theorem, Vector Operations (Dot Product, Cross Product), Matrix Multiplication<br>
 -Camera System<br>
 -Rendering Pipeline<br>
 -Graphics Programming in General<br>
@@ -34,6 +34,10 @@
 -Textures<br>
 
 ## Progress
+
+3D Model used for the gifs:<br>
+[Penger]("https://github.com/Max-Kawula/penger-obj")<br>
+[Jurassic Park 3 Spinosaure]("https://sketchfab.com/3d-models/jurassic-park-3-spinosaurus-0bcc1f6d3f1e491b9164f3e21fec8b19")<br>
 
 ![Spinning Cube](assets/3DEngine.gif)
 ![Penger my Beloved](assets/Penger.gif)
